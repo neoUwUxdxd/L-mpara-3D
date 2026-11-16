@@ -5,7 +5,7 @@
   --text: #ecebe8;
   --muted: #9a9894;
   --accent: #d8b46a;
-  --track: rgba(255, 255, 255, 0.12);
+  --track-bg: rgba(255, 255, 255, 0.12);
   color-scheme: dark;
   font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
@@ -39,10 +39,10 @@ body,
 
 .hud {
   position: absolute;
-  top: 16px;
-  right: 16px;
-  width: min(320px, calc(100vw - 32px));
-  max-height: calc(100vh - 32px);
+  top: calc(16px + env(safe-area-inset-top, 0px));
+  right: calc(16px + env(safe-area-inset-right, 0px));
+  width: min(320px, calc(100% - 32px));
+  max-height: calc(100% - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   background: var(--panel);
@@ -173,7 +173,7 @@ body,
 
 .hud-slider input[type='range'] {
   --pct: 50%;
-  --track-fill: linear-gradient(90deg, var(--accent) 0 var(--pct), rgba(255, 255, 255, 0.12) var(--pct) 100%);
+  --track-fill: linear-gradient(90deg, var(--accent) 0 var(--pct), var(--track-bg) var(--pct) 100%);
   appearance: none;
   -webkit-appearance: none;
   width: 100%;
@@ -319,9 +319,9 @@ body,
 @media (max-width: 560px) {
   .hud {
     top: auto;
-    bottom: 12px;
-    right: 12px;
-    left: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    right: calc(12px + env(safe-area-inset-right, 0px));
+    left: calc(12px + env(safe-area-inset-left, 0px));
     width: auto;
     max-height: 55vh;
   }

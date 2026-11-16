@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
+import { zipSingleFile } from './zip';
 
 function prepareClone(source: THREE.Object3D): THREE.Object3D {
   source.updateWorldMatrix(true, true);
@@ -25,8 +26,23 @@ function prepareClone(source: THREE.Object3D): THREE.Object3D {
   return clone;
 }
 
-function download(data: BlobPart, filename: string, mime: string) {
-  const blob = new Blob([data], { type: mime });
+interface DownloadsCapability {
+  save(req: { filename: string; data: Blob }): Promise<{ status: 'saved' | 'delivered' }>;
+}
+
+interface ClaudeRuntime {
+  use(name: 'downloads'): Promise<DownloadsCapability | null>;
+}
+
+export interface ExportResult {
+  filename: string;
+  bytes: number;
+  /** false si la persona canceló el guardado. */
+  saved: boolean;
+}
+
+function anchorDownload(data: Uint8Array, filename: string, mime: string) {
+  const blob = new Blob([data as BlobPart], { type: mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -38,8 +54,34 @@ function download(data: BlobPart, filename: string, mime: string) {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
+/**
+ * Entrega el archivo generado.
+ * - Dentro de un artefacto de Claude, las descargas pasan por la capacidad `downloads`,
+ *   que no admite .glb ni .stl: el modelo se entrega empaquetado en un .zip.
+ * - Fuera de Claude (npm run dev / preview) se descarga directamente.
+ */
+async function deliver(data: Uint8Array, filename: string, mime: string): Promise<ExportResult> {
+  const runtime = (window as unknown as { claude?: ClaudeRuntime }).claude;
+  const downloads = runtime?.use ? await runtime.use('downloads').catch(() => null) : null;
+  if (!downloads) {
+    anchorDownload(data, filename, mime);
+    return { filename, bytes: data.byteLength, saved: true };
+  }
+  const zip = await zipSingleFile(filename, data);
+  const zipName = filename.replace(/\.[^.]+$/, '') + '.zip';
+  try {
+    await downloads.save({ filename: zipName, data: zip });
+    return { filename: zipName, bytes: zip.size, saved: true };
+  } catch (err) {
+    const code = (err as { code?: string } | null)?.code;
+    if (code === 'declined') return { filename: zipName, bytes: zip.size, saved: false };
+    if (code === 'rate_limited') throw new Error('Ya hay una descarga pendiente de confirmar; espera unos segundos.');
+    throw new Error('Las descargas no están disponibles en esta vista.');
+  }
+}
+
 /** Exporta a .glb (unidades en metros, materiales PBR, texturas embebidas). */
-export async function exportGLB(source: THREE.Object3D, filename = 'lampara-arquitecto.glb'): Promise<number> {
+export async function exportGLB(source: THREE.Object3D, filename = 'lampara-arquitecto.glb'): Promise<ExportResult> {
   const clone = prepareClone(source);
   const exporter = new GLTFExporter();
   const result = await exporter.parseAsync(clone, {
@@ -48,15 +90,14 @@ export async function exportGLB(source: THREE.Object3D, filename = 'lampara-arqu
     maxTextureSize: 2048,
   });
   if (!(result instanceof ArrayBuffer)) throw new Error('El exportador GLTF no devolvió datos binarios');
-  download(result, filename, 'model/gltf-binary');
-  return result.byteLength;
+  return deliver(new Uint8Array(result), filename, 'model/gltf-binary');
 }
 
 /**
  * Exporta a .stl binario. STL no tiene unidades: se escala a milímetros,
  * la convención habitual de los programas de impresión 3D.
  */
-export function exportSTL(source: THREE.Object3D, filename = 'lampara-arquitecto.stl'): number {
+export async function exportSTL(source: THREE.Object3D, filename = 'lampara-arquitecto.stl'): Promise<ExportResult> {
   const clone = prepareClone(source);
   const wrapper = new THREE.Group();
   wrapper.scale.setScalar(1000);
@@ -65,6 +106,5 @@ export function exportSTL(source: THREE.Object3D, filename = 'lampara-arquitecto
   const exporter = new STLExporter();
   const view = exporter.parse(wrapper, { binary: true });
   const bytes = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
-  download(bytes, filename, 'model/stl');
-  return bytes.byteLength;
+  return deliver(bytes, filename, 'model/stl');
 }

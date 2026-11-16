@@ -184,7 +184,7 @@ export function ControlsHUD(props: ControlsHUDProps) {
             </button>
           </div>
           <p className="hud__status" role="status" aria-live="polite">
-            {status ?? 'GLB en metros con materiales PBR · STL en milímetros'}
+            {status ?? 'GLB en metros con materiales PBR · STL en milímetros · en Claude se entregan en .zip'}
           </p>
         </section>
 

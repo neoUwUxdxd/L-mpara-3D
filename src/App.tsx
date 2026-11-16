@@ -39,8 +39,8 @@ export default function App() {
     setBusy(true);
     setStatus(`Generando .${kind.toUpperCase()}…`);
     try {
-      const bytes = kind === 'glb' ? await exportGLB(lamp) : exportSTL(lamp);
-      setStatus(`Descargado lampara-arquitecto.${kind} (${formatBytes(bytes)})`);
+      const res = kind === 'glb' ? await exportGLB(lamp) : await exportSTL(lamp);
+      setStatus(res.saved ? `Guardado ${res.filename} (${formatBytes(res.bytes)})` : 'Descarga cancelada');
     } catch (err) {
       console.error(err);
       setStatus(`Error al exportar: ${err instanceof Error ? err.message : String(err)}`);
